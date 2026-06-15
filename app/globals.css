@@ -1,0 +1,182 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-jetbrains: 'JetBrains Mono', monospace;
+  --font-inter: 'Inter', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #000000;
+  color: #ffffff;
+  font-family: var(--font-jetbrains);
+  height: 100%;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scanline CRT overlay */
+.scanlines::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.25) 0px,
+    rgba(0, 0, 0, 0.25) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  opacity: 0.03;
+}
+
+/* Scrollbars — thin, terminal style */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 0;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #FF6600;
+}
+
+.thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2a #0a0a0a;
+}
+
+/* Bloomberg panel chrome */
+.bb-panel {
+  background: #0a0a0a;
+  border: 1px solid #1c1c1c;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.bb-panel-header {
+  background: #141414;
+  border-bottom: 1px solid #1c1c1c;
+  border-left: 2px solid #FF6600;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #FF6600;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.bb-label {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: #555555;
+  text-transform: uppercase;
+}
+
+.bb-row-hover:hover {
+  background: rgba(255, 102, 0, 0.06);
+  box-shadow: inset 2px 0 0 #FF6600;
+}
+
+.bb-glow {
+  box-shadow: 0 0 8px rgba(255, 102, 0, 0.4);
+}
+
+/* Data tables */
+.bb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.bb-table th {
+  text-align: right;
+  padding: 3px 8px;
+  color: #555555;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-bottom: 1px solid #222222;
+  position: sticky;
+  top: 0;
+  background: #0a0a0a;
+  z-index: 1;
+}
+.bb-table th:first-child,
+.bb-table td:first-child {
+  text-align: left;
+}
+.bb-table td {
+  padding: 3px 8px;
+  border-bottom: 1px solid #141414;
+  white-space: nowrap;
+}
+
+.flash-up {
+  animation: flashGreen 0.6s ease-out;
+}
+.flash-down {
+  animation: flashRed 0.6s ease-out;
+}
+@keyframes flashGreen {
+  0% { background-color: rgba(0, 255, 65, 0.4); }
+  100% { background-color: transparent; }
+}
+@keyframes flashRed {
+  0% { background-color: rgba(255, 49, 49, 0.4); }
+  100% { background-color: transparent; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #111 25%, #1a1a1a 50%, #111 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.term-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  background: #FF6600;
+  animation: blink 1s step-end infinite;
+  vertical-align: middle;
+}
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+input, button, select {
+  font-family: var(--font-jetbrains);
+}
+input:focus, select:focus {
+  outline: none;
+}
+
+.no-select {
+  user-select: none;
+}
