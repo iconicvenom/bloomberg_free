@@ -15,7 +15,29 @@ A pixel-accurate, fully functional **Bloomberg Terminal** clone built as a moder
 
 **Author & Maintainer — [@iconicvenom](https://github.com/iconicvenom)**
 
+![Bloomberg Terminal — Home screen](assets/screenshot-01.png)
+
 </div>
+
+---
+
+## 📸 Screenshots
+
+| Home | Equity | Forex |
+| --- | --- | --- |
+| ![Home](assets/screenshot-01.png) | ![Equity](assets/screenshot-02.png) | ![Forex](assets/screenshot-03.png) |
+
+| Commodities | Crypto | News |
+| --- | --- | --- |
+| ![Commodities](assets/screenshot-04.png) | ![Crypto](assets/screenshot-05.png) | ![News](assets/screenshot-06.png) |
+
+| Economics | Chart | Watchlist |
+| --- | --- | --- |
+| ![Economics](assets/screenshot-07.png) | ![Chart](assets/screenshot-08.png) | ![Watchlist](assets/screenshot-09.png) |
+
+| Watchlist | Screener |
+| --- | --- |
+| ![Watchlist](assets/screenshot-09.png) | ![Screener](assets/screenshot-10.png) |
 
 ---
 
