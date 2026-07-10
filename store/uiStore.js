@@ -12,6 +12,8 @@ export const useUIStore = create(
       activeCrypto: 'bitcoin',
       activeForexPair: 'EURUSD',
       activeCommodity: 'GC=F',
+      activeWishlistId: null,
+      migratedLegacyData: false,
       commandHistory: [],
       panelSizes: {},
 
@@ -21,6 +23,8 @@ export const useUIStore = create(
       setCrypto: (id) => set({ activeCrypto: id }),
       setForexPair: (pair) => set({ activeForexPair: pair }),
       setCommodity: (sym) => set({ activeCommodity: sym }),
+      setActiveWishlistId: (id) => set({ activeWishlistId: id }),
+      setMigrated: (v) => set({ migratedLegacyData: v }),
 
       navigate: (screen, payload = {}) => {
         const patch = { activeScreen: screen };
@@ -44,6 +48,8 @@ export const useUIStore = create(
         activeScreen: s.activeScreen,
         activeSymbol: s.activeSymbol,
         activeCrypto: s.activeCrypto,
+        activeWishlistId: s.activeWishlistId,
+        migratedLegacyData: s.migratedLegacyData,
         commandHistory: s.commandHistory,
         panelSizes: s.panelSizes,
       }),

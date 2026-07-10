@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { Star } from 'lucide-react';
 import { useApi } from '@/hooks/useApi';
 import { useUIStore } from '@/store/uiStore';
-import { useWatchlistStore } from '@/store/watchlistStore';
+import { useWishlistStore } from '@/store/wishlistStore';
 import Panel from '@/components/ui/Panel';
 import { StaleBadge } from '@/components/ui/Skeleton';
 import FxSlider from '@/components/ui/FxSlider';
@@ -22,7 +22,8 @@ const SECTORS = ['ALL', 'Technology', 'Communication', 'Cons. Disc.', 'Financial
 export default function ScreenerScreen() {
   const { data, stale } = useApi('/api/screener', { ttl: 3600000, key: 'screener' });
   const navigate = useUIStore((s) => s.navigate);
-  const wl = useWatchlistStore();
+  const { activeWishlistId, items, addItem } = useWishlistStore();
+  const activeSymbols = items[activeWishlistId]?.map((i) => i.symbol) || [];
 
   const [caps, setCaps] = useState([]);
   const [sector, setSector] = useState('ALL');
@@ -130,8 +131,8 @@ export default function ScreenerScreen() {
                     <td className={`text-right tabular-nums ${colorForDelta(r.week52ChangePct)}`}>{fmtPct(r.week52ChangePct)}</td>
                     <td className="text-right tabular-nums text-bb-gray">{r.dividendYield ? fmtNumber(r.dividendYield, 2) : '—'}</td>
                     <td className="text-right tabular-nums text-bb-gray">{fmtNumber(r.beta, 2)}</td>
-                    <td className="w-4" onClick={(e) => { e.stopPropagation(); wl.add(r.symbol); }}>
-                      <Star size={12} className={wl.symbols.includes(r.symbol) ? 'text-bb-green' : 'text-bb-dark hover:text-bb-orange'} />
+                    <td className="w-4" onClick={(e) => { e.stopPropagation(); if (activeWishlistId) addItem(activeWishlistId, r.symbol); }}>
+                      <Star size={12} className={activeSymbols.includes(r.symbol) ? 'text-bb-green' : 'text-bb-dark hover:text-bb-orange'} />
                     </td>
                   </tr>
                 ))}

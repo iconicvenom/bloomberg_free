@@ -6,8 +6,9 @@ import { useUIStore } from '@/store/uiStore';
 import { useApi } from '@/hooks/useApi';
 import { useLivePrice } from '@/hooks/useLivePrice';
 import { useHistoricalData } from '@/hooks/useHistoricalData';
-import { useWatchlistStore } from '@/store/watchlistStore';
+import { useWishlistStore } from '@/store/wishlistStore';
 import { usePortfolioStore } from '@/store/portfolioStore';
+import { useAccountStore } from '@/store/accountStore';
 import Panel from '@/components/ui/Panel';
 import { StaleBadge, SkeletonRows } from '@/components/ui/Skeleton';
 import PriceQuote from '@/components/widgets/PriceQuote';
@@ -17,6 +18,7 @@ import OrderBook from '@/components/widgets/OrderBook';
 import TechnicalIndicators from '@/components/widgets/TechnicalIndicators';
 import NewsFeed from '@/components/widgets/NewsFeed';
 import NewsModal from '@/components/widgets/NewsModal';
+import { promptDialog, alertDialog } from '@/lib/dialog';
 import { fmtPrice, fmtLarge, fmtNumber, fmtDate } from '@/lib/formatters';
 
 const TABS = ['OVERVIEW', 'TECHNICALS', 'FINANCIALS', 'NEWS'];
@@ -66,21 +68,28 @@ export default function EquityScreen() {
   const { candles, loading: chartLoading, stale: chartStale } = useHistoricalData(symbol, range);
   const news = useApi(`/api/news?q=${symbol}`, { ttl: 120000, key: `news:${symbol}`, poll: 60000 });
 
-  const wl = useWatchlistStore();
-  const inWatch = wl.symbols.includes(symbol);
+  const { activeWishlistId, items, addItem, removeItem } = useWishlistStore();
+  const activeSymbols = items[activeWishlistId]?.map((i) => i.symbol) || [];
+  const inWatch = activeSymbols.includes(symbol);
+  const activeItem = items[activeWishlistId]?.find((i) => i.symbol === symbol);
   const addHolding = usePortfolioStore((s) => s.addHolding);
+  const accounts = useAccountStore((s) => s.accounts);
 
   const quote = live || eq.data?.quote;
   const profile = eq.data?.profile || {};
   const metrics = eq.data?.metrics || {};
   const earnings = eq.data?.earnings || [];
 
-  const addToPortfolio = () => {
-    const qty = window.prompt(`Quantity of ${symbol} to add:`, '10');
+  const addToPortfolio = async () => {
+    if (accounts.length === 0) {
+      await alertDialog('Create an account first — go to the PORTFOLIO tab and click ACCOUNTS.');
+      return;
+    }
+    const qty = await promptDialog(`Quantity of ${symbol} to add:`, '10');
     if (!qty) return;
-    const cost = window.prompt('Purchase price per share:', quote?.price ? String(quote.price) : '100');
-    if (!cost) return;
-    addHolding({ symbol, quantity: qty, cost, date: new Date().toISOString().slice(0, 10) });
+    const avgCost = await promptDialog('Purchase price per share:', quote?.price ? String(quote.price) : '100');
+    if (!avgCost) return;
+    addHolding({ accountId: accounts[0].id, symbol, qty, avgCost, date: new Date().toISOString().slice(0, 10) });
   };
 
   return (
@@ -129,7 +138,11 @@ export default function EquityScreen() {
 
           <div className="mt-3 flex gap-1">
             <button
-              onClick={() => (inWatch ? wl.remove(symbol) : wl.add(symbol))}
+              onClick={() => {
+                if (!activeWishlistId) return;
+                if (inWatch && activeItem) removeItem(activeWishlistId, activeItem.id);
+                else addItem(activeWishlistId, symbol);
+              }}
               className={`flex flex-1 items-center justify-center gap-1 border py-1.5 text-2xs font-bold ${
                 inWatch ? 'border-bb-green/50 text-bb-green' : 'border-bb-orange/50 text-bb-orange hover:bg-bb-orange/10'
               }`}

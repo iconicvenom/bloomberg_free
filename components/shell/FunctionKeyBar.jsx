@@ -25,7 +25,7 @@ export default function FunctionKeyBar() {
 
   return (
     <nav className="flex h-8 flex-shrink-0 items-stretch border-b border-terminal-border bg-terminal-bg text-2xs">
-      {SCREENS.map((screen) => {
+      {SCREENS.filter((screen) => screen.key).map((screen) => {
         const active = activeScreen === screen.id;
         return (
           <button

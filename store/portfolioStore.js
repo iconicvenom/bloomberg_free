@@ -1,30 +1,41 @@
 'use client';
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
-let idCounter = 1;
+// Holdings are backed by the CSV file store (see lib/store/holdings.js) —
+// no localStorage persist here, this store is a thin fetch-backed cache.
+// selectedAccountId is pure client/view state: 'all' for the combined view,
+// or a specific accountId for a single-account view.
+export const usePortfolioStore = create((set, get) => ({
+  holdings: [], // { id, accountId, symbol, qty, avgCost, date }
+  selectedAccountId: 'all',
 
-export const usePortfolioStore = create(
-  persist(
-    (set, get) => ({
-      holdings: [], // { id, symbol, quantity, cost, date }
+  fetchHoldings: async () => {
+    const res = await fetch('/api/holdings');
+    const holdings = await res.json();
+    set({ holdings });
+  },
 
-      addHolding: ({ symbol, quantity, cost, date }) => {
-        const h = {
-          id: `${symbol}-${get().holdings.length}-${idCounter++}`,
-          symbol: symbol.toUpperCase().trim(),
-          quantity: Number(quantity),
-          cost: Number(cost),
-          date: date || new Date().toISOString().slice(0, 10),
-        };
-        set({ holdings: [...get().holdings, h] });
-      },
+  addHolding: async ({ accountId, symbol, qty, avgCost, date }) => {
+    await fetch('/api/holdings', {
+      method: 'POST',
+      body: JSON.stringify({ accountId, symbol, qty, avgCost, date }),
+    });
+    await get().fetchHoldings();
+  },
 
-      removeHolding: (id) => set({ holdings: get().holdings.filter((h) => h.id !== id) }),
+  removeHolding: async (id) => {
+    await fetch(`/api/holdings/${id}`, { method: 'DELETE' });
+    await get().fetchHoldings();
+  },
 
-      clear: () => set({ holdings: [] }),
-    }),
-    { name: 'bbt-portfolio' },
-  ),
-);
+  importRows: async (accountId, rows) => {
+    await fetch('/api/holdings/import', {
+      method: 'POST',
+      body: JSON.stringify({ accountId, rows }),
+    });
+    await get().fetchHoldings();
+  },
+
+  setSelectedAccount: (id) => set({ selectedAccountId: id }),
+}));

@@ -21,6 +21,22 @@ A pixel-accurate, fully functional **Bloomberg Terminal** clone built as a moder
 
 ---
 
+## 🆕 Changelog
+
+**Multi-account portfolio, wishlists, CSV backend, import, and alerts**
+
+- Added multi-account portfolio support — create/rename/delete accounts, tag holdings per account, and view either a single account or a combined/aggregated view with independent P&L per account.
+- Added CSV/XLSX portfolio import with an account picker, a header-alias matching heuristic, and a manual column-mapping fallback UI when headers can't be confidently matched. Re-importing upserts by symbol instead of creating duplicates.
+- Replaced the single watchlist with multiple named wishlists — create, rename, delete, and switch between lists via tabs.
+- Added price alerts (price / % change / 50-day moving-average cross) with a background checker loop, real-time delivery over Server-Sent Events, an in-app toast, and optional native browser notifications.
+- Introduced a local CSV file backend (`/data`) as the durable data store for accounts, holdings, wishlists, and alerts, replacing `localStorage` for this data. Existing `localStorage` portfolio/watchlist data is automatically migrated into the new backend once, on first load.
+- Added a custom `server.js` wrapping Next.js to host the alert background loop and the SSE stream as a persistent local process — `npm run dev` / `npm start` now boot through this server instead of the Next.js CLI defaults. Removed `vercel.json`, since this app no longer targets serverless deployment.
+- Replaced native `window.prompt` / `window.confirm` / `window.alert` dialogs across the app with an in-app dialog system (`DialogHost` + `lib/dialog.js`) rendered in the terminal's own visual style.
+
+See the [CSV Data Backend](#-csv-data-backend) section below for details on the new storage layer.
+
+---
+
 ## 📸 Screenshots
 
 | Home | Equity | Forex |
@@ -50,7 +66,10 @@ A pixel-accurate, fully functional **Bloomberg Terminal** clone built as a moder
 - **TradingView Lightweight Charts** — candlestick / Heikin Ashi / line / area / bar, with SMA / Bollinger / volume overlays and symbol compare
 - **Recharts** for RSI/MACD, the yield curve, FRED economic series, and portfolio allocation
 - **Resizable panels** (`react-resizable-panels`) with layout persisted to `localStorage`
-- **Watchlist + Portfolio** persisted via Zustand, with CSV export and live P&L
+- **Multi-account portfolio** — track holdings across separate accounts with independent cost basis, view any single account or a combined/aggregated view, CSV export and live P&L
+- **CSV/XLSX portfolio import** — upload a broker export, auto-detect columns (or map them manually), upsert into any account
+- **Multiple named wishlists** — replace the single watchlist with any number of named lists, switch between them, live-quote display per list
+- **Price alerts** — price / % change / 50-day MA cross alerts, checked by a background loop on the server and delivered in real time via Server-Sent Events + browser notifications
 - **Stock screener** with market-cap, sector, P/E and 52W-change filters (dual-handle sliders)
 - **Graceful degradation** — every screen falls back to cached data with a `[DELAYED]` badge; the UI never crashes on an API failure
 - CRT scanline overlay, JetBrains Mono / Inter typography, authentic Bloomberg palette
@@ -68,7 +87,9 @@ A pixel-accurate, fully functional **Bloomberg Terminal** clone built as a moder
 | Secondary charts | **Recharts** |
 | Animation | **Framer Motion** |
 | Icons | **Lucide React** |
-| State | **Zustand** (+ persist middleware) |
+| State | **Zustand** (persist for UI state only — domain data below) |
+| Data backend | Flat **CSV files** under `/data`, read/written by a custom Node server |
+| Real-time push | **Server-Sent Events** (alert triggers) |
 | Layout | **react-resizable-panels** |
 | Fonts | JetBrains Mono (data) · Inter (prose) |
 
@@ -138,25 +159,54 @@ The browser **never** sees an API key. Every external request is proxied through
 
 ---
 
+## 💾 CSV Data Backend
+
+This app is now **local, file-backed, and single-user** — accounts, holdings, wishlists, and price alerts are stored as flat CSV files under `/data`, read/written by the Next.js server (see `lib/csvStore.js`). There is no external database and no cloud service for this data; it lives entirely on the machine running the app.
+
+- **Where data lives**: `data/accounts.csv`, `data/holdings.csv`, `data/wishlists.csv`, `data/wishlist_items.csv`, `data/alerts.csv`. The directory is created automatically on first run and is git-ignored — your personal portfolio data is never committed.
+- **How it works**: each CSV is read fully into memory, mutated, and rewritten on every change — no indexing needed at this scale. A per-file in-process lock (`lib/csvStore.js`) serializes reads/writes so concurrent requests can't corrupt a file.
+- **Legacy data migration**: if you're upgrading from an older version of this app that stored a single portfolio/watchlist in `localStorage`, that data is automatically migrated into a new "Account 1" and a "Default" wishlist the first time you load the app, then the old `localStorage` keys are cleared.
+- **Why a custom server**: multi-account portfolios, wishlists, and CSV import all run as ordinary Next.js API routes. Alerts additionally need a background polling loop and a Server-Sent Events stream that persist across requests — both live in `server.js`, a small custom Node server that wraps Next.js. Run the app with `npm run dev` / `npm start` as usual; both now boot through `server.js` instead of the Next.js CLI defaults.
+
+### ⚠️ Known limitations
+
+- **Single-user, local-only** — no authentication, no multi-tenancy. Anyone with access to the machine (or the port, if exposed) can see and edit all data.
+- **Alerts require the server + a browser tab** — price alerts are checked by a background loop inside the Node process and pushed to the browser over SSE. If the server process is stopped, or no browser tab is open, alerts do not fire and are not queued for later — this is **not** push-to-closed-browser notification (no Service Worker / Push API).
+- **No write concurrency guarantees beyond a single process** — the file lock only serializes writes within one running server process. Running two instances of the app against the same `/data` directory is not supported.
+- **This is not a serverless-deployable app.** The background alert loop and SSE both require a persistent process; `vercel.json` has been removed and this app is not expected to work on Vercel or similar serverless platforms. Run it as a long-lived local process (`npm start`, or under a process manager like `pm2`/`systemd` if you want it to survive terminal closure).
+
+---
+
 ## 📁 Project Structure
 
 ```
+server.js                   custom Node server wrapping Next.js — hosts the
+                            alert background loop + SSE stream
+/data                       CSV data files (git-ignored) — accounts, holdings,
+                            wishlists, wishlist_items, alerts
 /app
   layout.js                 root shell, fonts, scanline overlay
   page.js                   client-only Terminal mount
-  /api/*                    15 server routes — all API keys live here only
+  /api/*                    server routes — external API keys + CSV data live here only
 /components
   /shell                    BootSequence, TopBar, FunctionKeyBar, StatusBar,
                             CommandInput, WorldClocks, PanelGrid, Terminal
-  /screens                  12 screens (Home, Equity, Forex, … Calendar)
+  /screens                  Home, Equity, Forex, … Calendar, Accounts, Alerts
   /widgets                  CandlestickChart, MiniSparkline, PriceQuote, OrderBook,
                             NewsFeed, NewsModal, MarketMover, HeatMap, ForexMatrix,
                             EconChart, TechnicalIndicators, IndicesTable, ChartToolbar
   /ui                       Panel, Skeleton, Glass, CircularPreloader, FxSlider, Carousel3D
+  /portfolio                ImportModal, ColumnMappingTable
+  /alerts                   AlertCreateForm, AlertToastHost, NotificationPermissionButton
 /lib                        config, formatters, indicators, cache, serverFetch,
                             commandParser, finnhub, yahoo, alphaVantage,
-                            coinGecko, newsApi, fredApi, liveFeed
-/store                      uiStore, marketStore, watchlistStore, portfolioStore
+                            coinGecko, newsApi, fredApi, liveFeed,
+                            csvStore, sseHub, alertEngine, migrateLegacyData,
+                            importParsers, columnMapping
+  /store                    accounts.js, holdings.js, wishlists.js,
+                            wishlistItems.js, alerts.js — CSV-backed domain helpers
+/store                      uiStore, marketStore, accountStore, portfolioStore,
+                            wishlistStore, alertStore
 /hooks                      useLivePrice, useHistoricalData, useNews,
                             useEconomicSeries, useApi
 ```
@@ -220,14 +270,17 @@ npm run build && npm start
 | `GC1 <CMDTY> <GO>` | Gold on Commodities |
 | `TOP N <GO>` | News screen |
 | `WPX` · `PORT` · `ECON` · `SCRN` · `CAL` | Watchlist · Portfolio · Economics · Screener · Calendar |
+| `ACCT` · `ALERT` | Accounts · Alerts (no free F-key slot — command-bar only) |
 
 Function keys **F1–F12** jump between screens directly.
 
 ---
 
-## ☁️ Deploy to Vercel
+## 🖥️ Deployment
 
-`vercel.json` is included. Push to a Git repo → import into Vercel → add the env vars from `.env.example` in project settings → deploy. Keys stay server-side because every external call routes through `/app/api/*`.
+This app now runs as a **persistent local Node process** — not a serverless deployment target. The background alert-checking loop and the SSE stream both require a long-lived process, so this app is not expected to work on Vercel or similar serverless platforms (`vercel.json` has been removed).
+
+Run it locally with `npm run dev` (development) or `npm run build && npm start` (production) — both now boot through the custom `server.js`. If you want it to keep running unattended, use a process manager such as `pm2` or a `systemd` service.
 
 ---
 

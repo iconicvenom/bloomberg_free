@@ -4,12 +4,17 @@ import { useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useUIStore } from '@/store/uiStore';
+import { useWishlistStore } from '@/store/wishlistStore';
+import { useAccountStore } from '@/store/accountStore';
 import { liveFeed } from '@/lib/liveFeed';
+import { migrateLegacyDataIfNeeded } from '@/lib/migrateLegacyData';
 import BootSequence from './BootSequence';
 import TopBar from './TopBar';
 import FunctionKeyBar from './FunctionKeyBar';
 import StatusBar from './StatusBar';
 import CircularPreloader from '@/components/ui/CircularPreloader';
+import AlertToastHost from '@/components/alerts/AlertToastHost';
+import DialogHost from '@/components/ui/DialogHost';
 
 const loading = () => (
   <div className="flex h-full items-center justify-center">
@@ -30,6 +35,8 @@ const SCREEN_COMPONENTS = {
   portfolio: dynamic(() => import('@/components/screens/PortfolioScreen'), { loading }),
   screener: dynamic(() => import('@/components/screens/ScreenerScreen'), { loading }),
   calendar: dynamic(() => import('@/components/screens/CalendarScreen'), { loading }),
+  accounts: dynamic(() => import('@/components/screens/AccountsScreen'), { loading }),
+  alerts: dynamic(() => import('@/components/screens/AlertsScreen'), { loading }),
 };
 
 export default function Terminal() {
@@ -39,6 +46,10 @@ export default function Terminal() {
 
   useEffect(() => {
     if (liveFeed) liveFeed.start();
+    migrateLegacyDataIfNeeded().finally(() => {
+      useWishlistStore.getState().fetchWishlists();
+      useAccountStore.getState().fetchAll();
+    });
     return () => { if (liveFeed) liveFeed.stop(); };
   }, []);
 
@@ -69,6 +80,8 @@ export default function Terminal() {
       </main>
 
       <StatusBar />
+      <AlertToastHost />
+      <DialogHost />
     </div>
   );
 }
