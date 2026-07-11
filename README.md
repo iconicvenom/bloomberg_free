@@ -32,6 +32,7 @@ A pixel-accurate, fully functional **Bloomberg Terminal** clone built as a moder
 - Introduced a local CSV file backend (`/data`) as the durable data store for accounts, holdings, wishlists, and alerts, replacing `localStorage` for this data. Existing `localStorage` portfolio/watchlist data is automatically migrated into the new backend once, on first load.
 - Added a custom `server.js` wrapping Next.js to host the alert background loop and the SSE stream as a persistent local process — `npm run dev` / `npm start` now boot through this server instead of the Next.js CLI defaults. Removed `vercel.json`, since this app no longer targets serverless deployment.
 - Replaced native `window.prompt` / `window.confirm` / `window.alert` dialogs across the app with an in-app dialog system (`DialogHost` + `lib/dialog.js`) rendered in the terminal's own visual style.
+- Added a `Dockerfile` and `docker-compose.yml` for running the app as a persistent container with `/data` mounted as a durable volume — see [Deployment](#deployment).
 
 See the [CSV Data Backend](#-csv-data-backend) section below for details on the new storage layer.
 
@@ -182,6 +183,8 @@ This app is now **local, file-backed, and single-user** — accounts, holdings, 
 ```
 server.js                   custom Node server wrapping Next.js — hosts the
                             alert background loop + SSE stream
+Dockerfile                  multi-stage build for the custom server (see Deployment)
+docker-compose.yml          local Docker Compose setup with a persistent /data volume
 /data                       CSV data files (git-ignored) — accounts, holdings,
                             wishlists, wishlist_items, alerts
 /app
@@ -278,9 +281,44 @@ Function keys **F1–F12** jump between screens directly.
 
 ## 🖥️ Deployment
 
-This app now runs as a **persistent local Node process** — not a serverless deployment target. The background alert-checking loop and the SSE stream both require a long-lived process, so this app is not expected to work on Vercel or similar serverless platforms (`vercel.json` has been removed).
+This app now runs as a **persistent local Node process** — not a serverless deployment target. The background alert-checking loop and the SSE stream both require a long-lived process, and `/data` must be a writable, persistent filesystem, so this app is **not expected to work on Vercel** or similar serverless platforms (`vercel.json` has been removed).
 
-Run it locally with `npm run dev` (development) or `npm run build && npm start` (production) — both now boot through the custom `server.js`. If you want it to keep running unattended, use a process manager such as `pm2` or a `systemd` service.
+### Option A — plain Node
+
+```bash
+npm run dev              # development, http://localhost:3000
+npm run build && npm start   # production
+```
+
+Both now boot through the custom `server.js`. If you want it to keep running unattended, use a process manager such as `pm2` or a `systemd` service.
+
+### Option B — Docker (recommended for hosting)
+
+A multi-stage `Dockerfile` and a `docker-compose.yml` are included. The container runs the same `server.js` as a long-lived process and persists `/data` in a named volume so accounts/holdings/wishlists/alerts survive restarts and rebuilds.
+
+```bash
+# 1. create your env file (API keys) if you haven't already
+cp .env.example .env.local
+#    fill in FINNHUB_KEY, ALPHA_VANTAGE_KEY, NEWS_API_KEY, FRED_KEY
+
+# 2. build and run
+docker compose up --build
+
+# → http://localhost:3000
+```
+
+Or without Compose:
+
+```bash
+docker build -t bloomberg_free .
+docker run -d -p 3000:3000 --env-file .env.local -v bloomberg_data:/app/data --name bloomberg_free bloomberg_free
+```
+
+Notes:
+- `/app/data` inside the container is a Docker volume (`bloomberg_data`) — deleting/rebuilding the container image does **not** wipe your portfolio/wishlist/alert data; only removing the volume does (`docker volume rm bloomberg_free_bloomberg_data`).
+- The container runs as a non-root user and binds to `0.0.0.0:3000` internally, so `-p 3000:3000` (or a different host port, e.g. `-p 8080:3000`) exposes it.
+- This is still a **single-user, local-data** app (see [Known limitations](#known-limitations)) — running it in a container on a shared host doesn't add authentication.
+- Any real host (VPS, Railway, Render, Fly.io, a home server, etc.) that can run a persistent container with a mounted volume works. Platforms that only run stateless/serverless functions (Vercel, standard AWS Lambda, Netlify Functions) do not.
 
 ---
 

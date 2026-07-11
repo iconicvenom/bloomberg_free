@@ -1,0 +1,13 @@
+services:
+  bloomberg_free:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.local
+    volumes:
+      - bloomberg_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  bloomberg_data:

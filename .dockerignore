@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+data
+.git
+.gitignore
+.env
+.env*.local
+.DS_Store
+*.log
+.claude
+assets
+implementation_prompt.md
+README.md
