@@ -12,7 +12,7 @@ import ImportModal from '@/components/portfolio/ImportModal';
 import AlertCreateForm from '@/components/alerts/AlertCreateForm';
 import { promptDialog, alertDialog } from '@/lib/dialog';
 import { resolveSymbolClient } from '@/lib/resolveSymbolClient';
-import { fmtPrice, fmtLarge, fmtPct, colorForDelta } from '@/lib/formatters';
+import { fmtPrice, fmtLarge, fmtPct, colorForDelta, currencySymbolFor } from '@/lib/formatters';
 
 const PIE_COLORS = ['#FF6600', '#4FC3F7', '#00FF41', '#FFAA00', '#FF3131', '#B0B0B0', '#9C27B0', '#00BCD4'];
 
@@ -48,20 +48,21 @@ export default function PortfolioScreen() {
     const mktValue = price != null ? price * h.qty : null;
     const pnl = mktValue != null ? mktValue - invested : null;
     const pnlPct = pnl != null && invested ? (pnl / invested) * 100 : null;
-    return { ...h, price, mktValue, invested, pnl, pnlPct, priceUnavailable: price == null };
+    return { ...h, price, mktValue, invested, pnl, pnlPct, priceUnavailable: price == null, currencySymbol: currencySymbolFor(h.symbol) };
   });
 
-  const totals = rows.reduce(
-    (acc, r) => ({
-      invested: acc.invested + r.invested,
-      // Unpriced rows contribute 0 to value/P&L totals — their "invested"
-      // amount still counts since that's known from stored cost basis.
-      value: acc.value + (r.mktValue ?? 0),
-      pnl: acc.pnl + (r.pnl ?? 0),
-    }),
-    { invested: 0, value: 0, pnl: 0 },
-  );
-  const totalPnlPct = totals.invested ? (totals.pnl / totals.invested) * 100 : 0;
+  // Totals are computed per currency (₹ / $) rather than blindly summed —
+  // a combined view can hold both NSE/BSE and US symbols, and adding a
+  // rupee value to a dollar value would produce a meaningless number.
+  const totalsByCurrency = rows.reduce((acc, r) => {
+    const cur = r.currencySymbol;
+    if (!acc[cur]) acc[cur] = { invested: 0, value: 0, pnl: 0 };
+    acc[cur].invested += r.invested;
+    acc[cur].value += r.mktValue ?? 0;
+    acc[cur].pnl += r.pnl ?? 0;
+    return acc;
+  }, {});
+  const currencies = Object.keys(totalsByCurrency);
 
   const pieData = rows.filter((r) => r.mktValue != null).map((r) => ({ name: `${r.symbol}`, value: r.mktValue }));
 
@@ -86,9 +87,9 @@ export default function PortfolioScreen() {
   };
 
   const exportCsv = () => {
-    const header = 'Account,Symbol,Quantity,AvgCost,CurrentPrice,MktValue,PnL,PnLPct,Date\n';
+    const header = 'Account,Symbol,Currency,Quantity,AvgCost,CurrentPrice,MktValue,PnL,PnLPct,Date\n';
     const body = rows.map((r) =>
-      `${accountLabel(r.accountId)},${r.symbol},${r.qty},${r.avgCost},${r.price != null ? r.price.toFixed(2) : 'N/A'},${r.mktValue != null ? r.mktValue.toFixed(2) : 'N/A'},${r.pnl != null ? r.pnl.toFixed(2) : 'N/A'},${r.pnlPct != null ? r.pnlPct.toFixed(2) : 'N/A'},${r.date}`,
+      `${accountLabel(r.accountId)},${r.symbol},${r.currencySymbol === '₹' ? 'INR' : 'USD'},${r.qty},${r.avgCost},${r.price != null ? r.price.toFixed(2) : 'N/A'},${r.mktValue != null ? r.mktValue.toFixed(2) : 'N/A'},${r.pnl != null ? r.pnl.toFixed(2) : 'N/A'},${r.pnlPct != null ? r.pnlPct.toFixed(2) : 'N/A'},${r.date}`,
     ).join('\n');
     const blob = new Blob([header + body], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -143,15 +144,15 @@ export default function PortfolioScreen() {
                     {combined && <td className="text-2xs text-bb-gray">{accountLabel(r.accountId)}</td>}
                     <td className="font-bold text-bb-blue">{r.symbol}</td>
                     <td className="text-right tabular-nums text-bb-gray">{r.qty}</td>
-                    <td className="text-right tabular-nums text-bb-gray">{fmtPrice(r.avgCost)}</td>
+                    <td className="text-right tabular-nums text-bb-gray">{r.currencySymbol}{fmtPrice(r.avgCost)}</td>
                     <td className={`text-right tabular-nums ${r.priceUnavailable ? 'text-bb-dark' : 'text-bb-white'}`} title={r.priceUnavailable ? 'Live price unavailable for this symbol' : undefined}>
-                      {r.priceUnavailable ? '—' : fmtPrice(r.price)}
+                      {r.priceUnavailable ? '—' : `${r.currencySymbol}${fmtPrice(r.price)}`}
                     </td>
                     <td className={`text-right tabular-nums ${r.priceUnavailable ? 'text-bb-dark' : 'text-bb-white'}`}>
-                      {r.priceUnavailable ? '—' : fmtPrice(r.mktValue)}
+                      {r.priceUnavailable ? '—' : `${r.currencySymbol}${fmtPrice(r.mktValue)}`}
                     </td>
                     <td className={`text-right tabular-nums ${r.priceUnavailable ? 'text-bb-dark' : colorForDelta(r.pnl)}`}>
-                      {r.priceUnavailable ? '—' : fmtPrice(r.pnl)}
+                      {r.priceUnavailable ? '—' : `${r.currencySymbol}${fmtPrice(r.pnl)}`}
                     </td>
                     <td className={`text-right tabular-nums ${r.priceUnavailable ? 'text-bb-dark' : colorForDelta(r.pnlPct)}`}>
                       {r.priceUnavailable ? '—' : fmtPct(r.pnlPct)}
@@ -173,19 +174,44 @@ export default function PortfolioScreen() {
           </div>
         </Panel>
 
-        <div className="grid flex-shrink-0 grid-cols-4 gap-0.5">
-          {[
-            { label: 'TOTAL INVESTED', value: `$${fmtLarge(totals.invested)}`, color: 'text-bb-white' },
-            { label: 'CURRENT VALUE', value: `$${fmtLarge(totals.value)}`, color: 'text-bb-white' },
-            { label: 'TOTAL P&L', value: `$${fmtPrice(totals.pnl)}`, color: colorForDelta(totals.pnl) },
-            { label: 'TOTAL P&L%', value: fmtPct(totalPnlPct), color: colorForDelta(totals.pnl) },
-          ].map((s) => (
-            <div key={s.label} className="bb-panel p-2">
-              <div className="bb-label">{s.label}</div>
-              <div className={`text-lg font-bold tabular-nums ${s.color}`}>{s.value}</div>
+        {/* One row of stat tiles per currency present in the current view —
+            a combined view holding both NSE/BSE and US symbols gets a
+            separate ₹ total and $ total rather than a meaningless sum of
+            the two currencies. */}
+        {currencies.map((cur) => {
+          const t = totalsByCurrency[cur];
+          const pct = t.invested ? (t.pnl / t.invested) * 100 : 0;
+          return (
+            <div key={cur} className="grid flex-shrink-0 grid-cols-4 gap-0.5">
+              {[
+                { label: `TOTAL INVESTED (${cur})`, value: `${cur}${fmtLarge(t.invested)}`, color: 'text-bb-white' },
+                { label: `CURRENT VALUE (${cur})`, value: `${cur}${fmtLarge(t.value)}`, color: 'text-bb-white' },
+                { label: `TOTAL P&L (${cur})`, value: `${cur}${fmtPrice(t.pnl)}`, color: colorForDelta(t.pnl) },
+                { label: 'TOTAL P&L%', value: fmtPct(pct), color: colorForDelta(t.pnl) },
+              ].map((s) => (
+                <div key={s.label} className="bb-panel p-2">
+                  <div className="bb-label">{s.label}</div>
+                  <div className={`text-lg font-bold tabular-nums ${s.color}`}>{s.value}</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          );
+        })}
+        {currencies.length === 0 && (
+          <div className="grid flex-shrink-0 grid-cols-4 gap-0.5">
+            {[
+              { label: 'TOTAL INVESTED', value: '—' },
+              { label: 'CURRENT VALUE', value: '—' },
+              { label: 'TOTAL P&L', value: '—' },
+              { label: 'TOTAL P&L%', value: '—' },
+            ].map((s) => (
+              <div key={s.label} className="bb-panel p-2">
+                <div className="bb-label">{s.label}</div>
+                <div className="text-lg font-bold tabular-nums text-bb-dark">{s.value}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex w-72 flex-shrink-0 flex-col">
@@ -197,7 +223,7 @@ export default function PortfolioScreen() {
                   <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={2}>
                     {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="#000" />)}
                   </Pie>
-                  <Tooltip contentStyle={{ background: '#000', border: '1px solid #FF660066', fontSize: 10 }} formatter={(v) => `$${fmtLarge(v)}`} />
+                  <Tooltip contentStyle={{ background: '#000', border: '1px solid #FF660066', fontSize: 10 }} formatter={(v) => `${currencies[0] || '₹'}${fmtLarge(v)}`} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
