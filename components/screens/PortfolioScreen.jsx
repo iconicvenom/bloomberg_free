@@ -65,6 +65,7 @@ export default function PortfolioScreen() {
   const currencies = Object.keys(totalsByCurrency);
 
   const pieData = rows.filter((r) => r.mktValue != null).map((r) => ({ name: `${r.symbol}`, value: r.mktValue }));
+  const pieTotal = pieData.reduce((sum, p) => sum + p.value, 0);
 
   const addManual = async () => {
     if (accounts.length === 0) {
@@ -237,7 +238,7 @@ export default function PortfolioScreen() {
                   <span className="inline-block h-2 w-2" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
                   <span className="text-bb-gray">{p.name}</span>
                 </span>
-                <span className="tabular-nums text-bb-dark">{totals.value ? fmtPct((p.value / totals.value) * 100, false) : '—'}</span>
+                <span className="tabular-nums text-bb-dark">{pieTotal ? fmtPct((p.value / pieTotal) * 100, false) : '—'}</span>
               </div>
             ))}
           </div>
