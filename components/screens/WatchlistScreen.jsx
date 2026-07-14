@@ -8,7 +8,8 @@ import { useLivePrice } from '@/hooks/useLivePrice';
 import Panel from '@/components/ui/Panel';
 import MiniSparkline from '@/components/widgets/MiniSparkline';
 import AlertCreateForm from '@/components/alerts/AlertCreateForm';
-import { promptDialog, confirmDialog } from '@/lib/dialog';
+import { promptDialog, confirmDialog, alertDialog } from '@/lib/dialog';
+import { resolveSymbolClient } from '@/lib/resolveSymbolClient';
 import { fmtPrice, fmtDelta, fmtPct, colorForDelta } from '@/lib/formatters';
 
 function PriceCell({ live, fallback }) {
@@ -37,6 +38,7 @@ export default function WatchlistScreen() {
   const navigate = useUIStore((s) => s.navigate);
   const [input, setInput] = useState('');
   const [alertSymbol, setAlertSymbol] = useState(null);
+  const [resolvingInput, setResolvingInput] = useState(false);
   const dragIdx = useRef(null);
 
   useEffect(() => {
@@ -75,6 +77,20 @@ export default function WatchlistScreen() {
     removeWishlist(w.id);
   };
 
+  const addSymbol = async (e) => {
+    e.preventDefault();
+    if (!activeWishlistId || !input.trim()) return;
+    setResolvingInput(true);
+    const { symbol, resolved } = await resolveSymbolClient(input);
+    setResolvingInput(false);
+    setInput('');
+    if (!resolved) {
+      await alertDialog(`Symbol "${input}" not found.`);
+      return;
+    }
+    addItem(activeWishlistId, symbol);
+  };
+
   return (
     <div className="flex h-full flex-col gap-0.5 p-0.5">
       <div className="flex flex-shrink-0 items-stretch border-b border-terminal-divider bg-terminal-header text-2xs">
@@ -104,18 +120,20 @@ export default function WatchlistScreen() {
 
       <Panel title="WATCHLIST · WPX" right={`${activeItems.length} SECURITIES`} noPad className="min-h-0 flex-1">
         <form
-          onSubmit={(e) => { e.preventDefault(); if (activeWishlistId) addItem(activeWishlistId, input); setInput(''); }}
+          onSubmit={addSymbol}
           className="flex items-center gap-2 border-b border-terminal-divider bg-terminal-header px-2 py-1.5"
         >
           <Plus size={13} className="text-bb-orange" />
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="ADD SYMBOL (e.g. AAPL)"
-            disabled={!activeWishlistId}
+            placeholder="ADD SYMBOL (e.g. AAPL, SBIN)"
+            disabled={!activeWishlistId || resolvingInput}
             className="w-48 bg-transparent text-xs uppercase text-bb-white placeholder:text-bb-dark"
           />
-          <button type="submit" disabled={!activeWishlistId} className="bg-bb-orange px-2 py-0.5 text-2xs font-bold text-black disabled:opacity-40">ADD</button>
+          <button type="submit" disabled={!activeWishlistId || resolvingInput} className="bg-bb-orange px-2 py-0.5 text-2xs font-bold text-black disabled:opacity-40">
+            {resolvingInput ? 'RESOLVING…' : 'ADD'}
+          </button>
         </form>
 
         <div className="overflow-auto thin-scroll">

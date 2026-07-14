@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Star, Check } from 'lucide-react';
 import { useUIStore } from '@/store/uiStore';
 import { useApi } from '@/hooks/useApi';
 import { useLivePrice } from '@/hooks/useLivePrice';
 import { useHistoricalData } from '@/hooks/useHistoricalData';
+import { useResolvedSymbol } from '@/hooks/useResolvedSymbol';
 import { useWishlistStore } from '@/store/wishlistStore';
 import { usePortfolioStore } from '@/store/portfolioStore';
 import { useAccountStore } from '@/store/accountStore';
@@ -56,7 +57,21 @@ function AnalystBar({ recommendations }) {
 }
 
 export default function EquityScreen() {
-  const symbol = useUIStore((s) => s.activeSymbol);
+  const rawSymbol = useUIStore((s) => s.activeSymbol);
+  const setSymbol = useUIStore((s) => s.setSymbol);
+  // Resolves bare/unsuffixed Indian tickers (e.g. "SBIN" -> "SBIN.NS")
+  // regardless of which screen the user clicked through from — see
+  // hooks/useResolvedSymbol.js. Once resolved, the fix is persisted back
+  // into uiStore so it doesn't need re-resolving on the next visit.
+  const { resolvedSymbol, resolving, notFound } = useResolvedSymbol(rawSymbol);
+  const symbol = resolvedSymbol;
+
+  useEffect(() => {
+    if (!resolving && !notFound && symbol && symbol !== rawSymbol) {
+      setSymbol(symbol);
+    }
+  }, [resolving, notFound, symbol, rawSymbol, setSymbol]);
+
   const [range, setRange] = useState('3M');
   const [chartType, setChartType] = useState('candlestick');
   const [overlays, setOverlays] = useState({ sma20: false, sma50: true, sma200: false, bollinger: false, volume: true });
@@ -92,11 +107,25 @@ export default function EquityScreen() {
     addHolding({ accountId: accounts[0].id, symbol, qty, avgCost, date: new Date().toISOString().slice(0, 10) });
   };
 
+  if (notFound) {
+    return (
+      <div className="flex h-full items-center justify-center p-4">
+        <div className="bb-panel max-w-sm p-6 text-center">
+          <div className="mb-2 text-sm font-bold text-bb-red">SYMBOL NOT FOUND</div>
+          <div className="text-2xs text-bb-gray">
+            Couldn&apos;t resolve &quot;{rawSymbol}&quot; to a valid ticker. Try the full exchange-suffixed symbol
+            (e.g. RELIANCE.NS for NSE, RELIANCE.BO for BSE) or search by company name in the command bar.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full gap-0.5 p-0.5">
       {/* LEFT COLUMN */}
       <div className="flex w-72 flex-shrink-0 flex-col">
-        <Panel title={`${symbol} EQUITY`} right={<StaleBadge stale={eq.stale} />}>
+        <Panel title={`${symbol} EQUITY`} right={<><StaleBadge stale={resolving} label="RESOLVING" /><StaleBadge stale={eq.stale} /></>}>
           <div className="mb-2">
             <div className="text-xs font-bold text-bb-blue">{profile.name || symbol}</div>
             <div className="text-2xs text-bb-dark">{symbol} {profile.exchange ? `· ${profile.exchange}` : ''} EQUITY</div>

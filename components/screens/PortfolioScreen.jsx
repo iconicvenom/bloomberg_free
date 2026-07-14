@@ -11,6 +11,7 @@ import Panel from '@/components/ui/Panel';
 import ImportModal from '@/components/portfolio/ImportModal';
 import AlertCreateForm from '@/components/alerts/AlertCreateForm';
 import { promptDialog, alertDialog } from '@/lib/dialog';
+import { resolveSymbolClient } from '@/lib/resolveSymbolClient';
 import { fmtPrice, fmtLarge, fmtPct, colorForDelta } from '@/lib/formatters';
 
 const PIE_COLORS = ['#FF6600', '#4FC3F7', '#00FF41', '#FFAA00', '#FF3131', '#B0B0B0', '#9C27B0', '#00BCD4'];
@@ -63,8 +64,13 @@ export default function PortfolioScreen() {
       return;
     }
     const targetAccountId = combined ? accounts[0].id : selectedAccountId;
-    const symbol = await promptDialog('Symbol:');
-    if (!symbol) return;
+    const rawSymbol = await promptDialog('Symbol:');
+    if (!rawSymbol) return;
+    const { symbol, resolved } = await resolveSymbolClient(rawSymbol);
+    if (!resolved) {
+      await alertDialog(`Symbol "${rawSymbol}" not found.`);
+      return;
+    }
     const qty = await promptDialog('Quantity:', '10');
     if (!qty) return;
     const avgCost = await promptDialog('Purchase price:', '100');

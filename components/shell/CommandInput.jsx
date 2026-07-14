@@ -1,15 +1,18 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 import { useUIStore } from '@/store/uiStore';
 import { parseCommand } from '@/lib/commandParser';
+import { resolveSymbolClient } from '@/lib/resolveSymbolClient';
+import { alertDialog } from '@/lib/dialog';
 
 export default function CommandInput() {
   const [value, setValue] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
   const [histIdx, setHistIdx] = useState(-1);
+  const [resolving, setResolving] = useState(false);
   const inputRef = useRef(null);
   const navigate = useUIStore((s) => s.navigate);
   const pushCommand = useUIStore((s) => s.pushCommand);
@@ -35,12 +38,26 @@ export default function CommandInput() {
     return () => clearTimeout(t);
   }, [value]);
 
-  const run = useCallback((raw) => {
+  const run = useCallback(async (raw) => {
     const cmd = (raw ?? value).trim();
     if (!cmd) return;
     const intent = parseCommand(cmd);
     if (intent) {
-      navigate(intent.screen, intent.payload || {});
+      // Bare tickers/company names typed directly (not picked from the
+      // autocomplete dropdown, which already returns fully-qualified
+      // symbols) need resolving — e.g. "sbin" -> "SBIN.NS".
+      if ((intent.screen === 'equity' || intent.screen === 'chart') && intent.payload?.symbol) {
+        setResolving(true);
+        const { symbol, resolved } = await resolveSymbolClient(intent.payload.symbol);
+        setResolving(false);
+        if (!resolved) {
+          await alertDialog(`Symbol "${intent.payload.symbol}" not found.`);
+          return;
+        }
+        navigate(intent.screen, { ...intent.payload, symbol });
+      } else {
+        navigate(intent.screen, intent.payload || {});
+      }
       pushCommand(cmd.toUpperCase());
     }
     setValue('');
@@ -76,7 +93,14 @@ export default function CommandInput() {
   };
 
   const pickSuggestion = (sym) => {
-    run(`${sym} EQUITY GO`);
+    // Suggestions from /api/search are already fully-qualified symbols —
+    // navigate directly instead of round-tripping through resolveSymbol again.
+    navigate('equity', { symbol: sym });
+    pushCommand(`${sym} EQUITY`);
+    setValue('');
+    setSuggestions([]);
+    setOpen(false);
+    setHistIdx(-1);
   };
 
   return (
@@ -96,9 +120,10 @@ export default function CommandInput() {
         />
         <button
           onClick={() => run()}
-          className="bg-bb-orange px-2 py-0.5 text-2xs font-bold text-black hover:bg-bb-amber"
+          disabled={resolving}
+          className="flex items-center gap-1 bg-bb-orange px-2 py-0.5 text-2xs font-bold text-black hover:bg-bb-amber disabled:opacity-60"
         >
-          GO
+          {resolving ? <><Loader2 size={11} className="animate-spin" /> RESOLVING</> : 'GO'}
         </button>
       </div>
 
