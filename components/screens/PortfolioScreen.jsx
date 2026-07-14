@@ -37,26 +37,33 @@ export default function PortfolioScreen() {
 
   const accountLabel = (accountId) => accounts.find((a) => a.id === accountId)?.label || '—';
 
+  // No live price yet is different from "price genuinely unavailable" —
+  // both render as null/— here (via fmtPrice's existing null handling)
+  // rather than silently substituting avgCost, which would fake a flat
+  // 0.00 change for a holding whose live price actually failed to fetch
+  // (e.g. an unresolved symbol, or a currency/exchange mismatch).
   const rows = scopedHoldings.map((h) => {
-    const price = live[h.symbol]?.price ?? h.avgCost;
-    const mktValue = price * h.qty;
+    const price = live[h.symbol]?.price ?? null;
     const invested = h.avgCost * h.qty;
-    const pnl = mktValue - invested;
-    const pnlPct = invested ? (pnl / invested) * 100 : 0;
-    return { ...h, price, mktValue, invested, pnl, pnlPct };
+    const mktValue = price != null ? price * h.qty : null;
+    const pnl = mktValue != null ? mktValue - invested : null;
+    const pnlPct = pnl != null && invested ? (pnl / invested) * 100 : null;
+    return { ...h, price, mktValue, invested, pnl, pnlPct, priceUnavailable: price == null };
   });
 
   const totals = rows.reduce(
     (acc, r) => ({
       invested: acc.invested + r.invested,
-      value: acc.value + r.mktValue,
-      pnl: acc.pnl + r.pnl,
+      // Unpriced rows contribute 0 to value/P&L totals — their "invested"
+      // amount still counts since that's known from stored cost basis.
+      value: acc.value + (r.mktValue ?? 0),
+      pnl: acc.pnl + (r.pnl ?? 0),
     }),
     { invested: 0, value: 0, pnl: 0 },
   );
   const totalPnlPct = totals.invested ? (totals.pnl / totals.invested) * 100 : 0;
 
-  const pieData = rows.map((r) => ({ name: `${r.symbol}`, value: r.mktValue }));
+  const pieData = rows.filter((r) => r.mktValue != null).map((r) => ({ name: `${r.symbol}`, value: r.mktValue }));
 
   const addManual = async () => {
     if (accounts.length === 0) {
@@ -81,7 +88,7 @@ export default function PortfolioScreen() {
   const exportCsv = () => {
     const header = 'Account,Symbol,Quantity,AvgCost,CurrentPrice,MktValue,PnL,PnLPct,Date\n';
     const body = rows.map((r) =>
-      `${accountLabel(r.accountId)},${r.symbol},${r.qty},${r.avgCost},${r.price.toFixed(2)},${r.mktValue.toFixed(2)},${r.pnl.toFixed(2)},${r.pnlPct.toFixed(2)},${r.date}`,
+      `${accountLabel(r.accountId)},${r.symbol},${r.qty},${r.avgCost},${r.price != null ? r.price.toFixed(2) : 'N/A'},${r.mktValue != null ? r.mktValue.toFixed(2) : 'N/A'},${r.pnl != null ? r.pnl.toFixed(2) : 'N/A'},${r.pnlPct != null ? r.pnlPct.toFixed(2) : 'N/A'},${r.date}`,
     ).join('\n');
     const blob = new Blob([header + body], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -137,10 +144,18 @@ export default function PortfolioScreen() {
                     <td className="font-bold text-bb-blue">{r.symbol}</td>
                     <td className="text-right tabular-nums text-bb-gray">{r.qty}</td>
                     <td className="text-right tabular-nums text-bb-gray">{fmtPrice(r.avgCost)}</td>
-                    <td className="text-right tabular-nums text-bb-white">{fmtPrice(r.price)}</td>
-                    <td className="text-right tabular-nums text-bb-white">{fmtPrice(r.mktValue)}</td>
-                    <td className={`text-right tabular-nums ${colorForDelta(r.pnl)}`}>{fmtPrice(r.pnl)}</td>
-                    <td className={`text-right tabular-nums ${colorForDelta(r.pnlPct)}`}>{fmtPct(r.pnlPct)}</td>
+                    <td className={`text-right tabular-nums ${r.priceUnavailable ? 'text-bb-dark' : 'text-bb-white'}`} title={r.priceUnavailable ? 'Live price unavailable for this symbol' : undefined}>
+                      {r.priceUnavailable ? '—' : fmtPrice(r.price)}
+                    </td>
+                    <td className={`text-right tabular-nums ${r.priceUnavailable ? 'text-bb-dark' : 'text-bb-white'}`}>
+                      {r.priceUnavailable ? '—' : fmtPrice(r.mktValue)}
+                    </td>
+                    <td className={`text-right tabular-nums ${r.priceUnavailable ? 'text-bb-dark' : colorForDelta(r.pnl)}`}>
+                      {r.priceUnavailable ? '—' : fmtPrice(r.pnl)}
+                    </td>
+                    <td className={`text-right tabular-nums ${r.priceUnavailable ? 'text-bb-dark' : colorForDelta(r.pnlPct)}`}>
+                      {r.priceUnavailable ? '—' : fmtPct(r.pnlPct)}
+                    </td>
                     <td className="text-right text-2xs text-bb-dark">{r.date}</td>
                     <td className="w-4" onClick={(e) => { e.stopPropagation(); setAlertSymbol(r.symbol); }}>
                       <Bell size={12} className="text-bb-dark hover:text-bb-amber" />
